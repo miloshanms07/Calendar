@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Calendar</title>
+<style>
+:root{
+  --bg:#10141a; --panel:#171d25; --panel-alt:#1e2530; --line:#2b3340;
+  --ink:#dfe6ee; --muted:#7c8798; --accent:#c99a3e; --accent-ink:#10141a;
+  --danger:#c05a4e; --today-ring:#5ea8a0;
+  --font-serif:'Iowan Old Style','Palatino Linotype',Georgia,serif;
+  --font-sans:-apple-system,Helvetica,Arial,sans-serif;
+  --font-mono:'SFMono-Regular',Menlo,Consolas,monospace;
+}
+html[data-theme="light"]{
+  --bg:#eceee7; --panel:#ffffff; --panel-alt:#f4f5f0; --line:#d3d6cc;
+  --ink:#1c2127; --muted:#6b7280; --accent:#9c7126; --accent-ink:#ffffff;
+  --danger:#a8453a; --today-ring:#3f7d76;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);}
+button{font-family:var(--font-sans);cursor:pointer;}
+input,select,textarea{font-family:var(--font-sans);}
+
+.app{display:flex;flex-direction:column;height:100vh;}
+
+/* Toolbar */
+.toolbar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);
+}
+.brand{font-family:var(--font-serif);font-size:1.3rem;margin-right:8px;white-space:nowrap;}
+.views{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden;}
+.views button{
+  background:transparent;border:none;color:var(--muted);padding:6px 12px;font-size:0.8rem;
+  border-right:1px solid var(--line);
+}
+.views button:last-child{border-right:none;}
+.views button.active{background:var(--accent);color:var(--accent-ink);}
+.navctl{display:flex;align-items:center;gap:6px;}
+.navctl button{
+  background:transparent;border:1px solid var(--line);color:var(--ink);
+  width:30px;height:30px;border-radius:5px;font-size:0.9rem;
+}
+.navctl button:hover{border-color:var(--accent);}
+.navctl .today-btn{width:auto;padding:0 10px;font-size:0.75rem;font-family:var(--font-mono);}
+.period-label{font-family:var(--font-mono);font-size:0.85rem;min-width:150px;color:var(--muted);}
+.spacer{flex:1;}
+.search-wrap{position:relative;}
+#searchInput{
+  background:var(--panel-alt);border:1px solid var(--line);color:var(--ink);
+  padding:6px 10px;border-radius:5px;font-size:0.8rem;width:180px;
+}
+#searchInput:focus{outline:none;border-color:var(--accent);}
+.search-results{
+  position:absolute;top:34px;left:0;width:280px;background:var(--panel);
+  border:1px solid var(--line);border-radius:5px;z-index:50;max-height:280px;overflow:auto;
+  display:none;
+}
+.search-results.open{display:block;}
+.search-results .item{
+  padding:8px 10px;font-size:0.78rem;border-bottom:1px solid var(--line);
+}
+.search-results .item:last-child{border-bottom:none;}
+.search-results .item:hover{background:var(--panel-alt);}
+.search-results .item .t{color:var(--ink);}
+.search-results .item .d{color:var(--muted);font-family:var(--font-mono);font-size:0.7rem;}
+.search-results .empty{padding:10px;color:var(--muted);font-size:0.78rem;}
+.btn{
+  background:var(--panel-alt);border:1px solid var(--line);color:var(--ink);
+  padding:6px 12px;border-radius:5px;font-size:0.78rem;
+}
+.btn:hover{border-color:var(--accent);}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+.icon-btn{
+  background:transparent;border:1px solid var(--line);color:var(--muted);
+  width:30px;height:30px;border-radius:5px;font-size:0.85rem;
+}
+.icon-btn:hover{border-color:var(--accent);color:var(--ink);}
+
+/* Main area */
+.main{flex:1;overflow:auto;position:relative;}
+
+/* Month view */
+.month-dow{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--line);}
+.month-dow div{
+  font-family:var(--font-mono);font-size:0.68rem;color:var(--muted);text-align:center;padding:6px 0;
+}
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;height:calc(100% - 28px);}
+.mcell{
+  border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+  padding:5px;position:relative;min-height:100px;overflow:hidden;
+}
+.mcell.dim{color:var(--muted);background:var(--panel);}
+.mcell .dnum{font-family:var(--font-mono);font-size:0.78rem;color:var(--muted);}
+.mcell.today .dnum{
+  display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;
+  border-radius:50%;background:var(--today-ring);color:#fff;
+}
+.mcell.dragover{outline:2px dashed var(--accent);outline-offset:-2px;}
+.chip{
+  margin-top:3px;padding:2px 5px;border-radius:3px;font-size:0.68rem;
+  background:var(--panel-alt);border-left:3px solid var(--accent);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;cursor:grab;
+}
+.chip .tm{font-family:var(--font-mono);color:var(--muted);margin-right:4px;}
+.more-link{font-size:0.65rem;color:var(--muted);margin-top:2px;cursor:pointer;}
+
+/* Week/day view */
+.tv-header{display:flex;border-bottom:1px solid var(--line);}
+.tv-gutter-header{width:52px;flex-shrink:0;}
+.tv-day-header{
+  flex:1;text-align:center;padding:8px 0;border-left:1px solid var(--line);font-family:var(--font-mono);
+}
+.tv-day-header .dn{font-size:0.68rem;color:var(--muted);}
+.tv-day-header .dd{font-size:1rem;}
+.tv-day-header.today .dd{color:var(--today-ring);}
+.allday-row{display:flex;border-bottom:1px solid var(--line);min-height:26px;}
+.allday-gutter{width:52px;flex-shrink:0;font-family:var(--font-mono);font-size:0.6rem;color:var(--muted);padding:4px;}
+.allday-cell{flex:1;border-left:1px solid var(--line);padding:2px;position:relative;}
+.tv-body{display:flex;position:relative;}
+.tv-gutter{width:52px;flex-shrink:0;}
+.tv-gutter .hr{height:48px;font-family:var(--font-mono);font-size:0.62rem;color:var(--muted);
+  text-align:right;padding-right:6px;transform:translateY(-6px);}
+.tv-col{flex:1;border-left:1px solid var(--line);position:relative;}
+.tv-col .hourline{height:48px;border-bottom:1px solid var(--line);}
+.tv-col.dragover{background:var(--panel-alt);}
+.now-line{position:absolute;left:0;right:0;height:0;border-top:1.5px solid var(--danger);z-index:5;}
+.tblock{
+  position:absolute;left:2px;right:2px;background:var(--panel-alt);border-left:3px solid var(--accent);
+  border-radius:3px;font-size:0.68rem;padding:2px 5px;overflow:hidden;cursor:grab;z-index:2;
+}
+.tblock .tt{font-family:var(--font-mono);color:var(--muted);display:block;font-size:0.6rem;}
+
+/* Modal */
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:100;
+}
+.overlay.open{display:flex;}
+.modal{
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:20px;width:360px;max-width:92vw;
+  max-height:88vh;overflow:auto;
+}
+.modal h2{margin:0 0 14px;font-size:1.05rem;font-family:var(--font-serif);}
+.field{margin-bottom:10px;}
+.field label{display:block;font-size:0.72rem;color:var(--muted);margin-bottom:3px;}
+.field input[type=text],.field input[type=date],.field input[type=time],.field select,.field textarea{
+  width:100%;background:var(--panel-alt);border:1px solid var(--line);color:var(--ink);
+  padding:6px 8px;border-radius:4px;font-size:0.82rem;
+}
+.field textarea{min-height:70px;resize:vertical;}
+.row2{display:flex;gap:8px;}
+.row2 .field{flex:1;}
+.checkrow{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:0.8rem;}
+.tagpick{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;}
+.tagpick .sw{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
+.tagpick .sw.selected{border-color:var(--ink);}
+.modal-actions{display:flex;justify-content:space-between;margin-top:16px;}
+.modal-actions .left button{margin-right:6px;}
+
+/* Tag manager */
+.tagmgr{position:absolute;top:44px;right:16px;background:var(--panel);border:1px solid var(--line);
+  border-radius:6px;padding:12px;width:220px;z-index:60;display:none;}
+.tagmgr.open{display:block;}
+.tagmgr h3{margin:0 0 8px;font-size:0.85rem;}
+.tagmgr .tagrow{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:0.78rem;}
+.tagmgr .tagrow .sw{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+.tagmgr .tagrow .x{margin-left:auto;color:var(--muted);cursor:pointer;}
+.tagmgr .addtag{display:flex;gap:4px;margin-top:8px;}
+.tagmgr .addtag input{flex:1;background:var(--panel-alt);border:1px solid var(--line);color:var(--ink);
+  padding:4px 6px;border-radius:4px;font-size:0.75rem;}
+
+/* Help */
+.help{position:absolute;top:44px;right:16px;background:var(--panel);border:1px solid var(--line);
+  border-radius:6px;padding:14px;width:260px;z-index:60;display:none;font-size:0.78rem;}
+.help.open{display:block;}
+.help h3{margin:0 0 8px;font-size:0.85rem;}
+.help .k{font-family:var(--font-mono);background:var(--panel-alt);border:1px solid var(--line);
+  border-radius:3px;padding:1px 5px;margin-right:6px;}
+.help div.line{margin-bottom:5px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <div class="brand">Calendar</div>
+    <div class="views">
+      <button data-view="month" class="active">Month</button>
+      <button data-view="week">Week</button>
+      <button data-view="day">Day</button>
+    </div>
+    <div class="navctl">
+      <button id="prevBtn">&#8249;</button>
+      <button class="today-btn" id="todayBtn">Today</button>
+      <button id="nextBtn">&#8250;</button>
+    </div>
+    <div class="period-label" id="periodLabel"></div>
+    <div class="spacer"></div>
+    <div class="search-wrap">
+      <input id="searchInput" type="text" placeholder="Search  /">
+      <div class="search-results" id="searchResults"></div>
+    </div>
+    <button class="btn" id="tagsBtn">Tags</button>
+    <button class="btn primary" id="newBtn">+ Event</button>
+    <button class="icon-btn" id="themeBtn" title="Toggle theme">&#9789;</button>
+    <button class="icon-btn" id="helpBtn" title="Shortcuts">?</button>
+  </div>
+
+  <div class="main" id="main">
+    <div class="month-dow" id="monthDow"></div>
+    <div class="month-grid" id="monthGrid"></div>
+  </div>
+
+  <div class="tagmgr" id="tagMgr">
+    <h3>Tags</h3>
+    <div id="tagList"></div>
+    <div class="addtag">
+      <input id="newTagName" type="text" placeholder="New tag name">
+      <button class="btn" id="addTagBtn">Add</button>
+    </div>
+  </div>
+
+  <div class="help" id="helpPanel">
+    <h3>Keyboard shortcuts</h3>
+    <div class="line"><span class="k">m</span><span class="k">w</span><span class="k">d</span> switch view</div>
+    <div class="line"><span class="k">h</span><span class="k">l</span> prev / next period</div>
+    <div class="line"><span class="k">j</span><span class="k">k</span> scroll timeline</div>
+    <div class="line"><span class="k">t</span> jump to today</div>
+    <div class="line"><span class="k">n</span> new event</div>
+    <div class="line"><span class="k">/</span> focus search</div>
+    <div class="line"><span class="k">Esc</span> close / clear</div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">New event</h2>
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="f-title" placeholder="Untitled event">
+    </div>
+    <div class="checkrow">
+      <input type="checkbox" id="f-allday"><label for="f-allday">All day</label>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Date</label><input type="date" id="f-date"></div>
+    </div>
+    <div class="row2" id="timeRow">
+      <div class="field"><label>Start</label><input type="time" id="f-start" value="09:00"></div>
+      <div class="field"><label>End</label><input type="time" id="f-end" value="10:00"></div>
+    </div>
+    <div class="field">
+      <label>Tag</label>
+      <div class="tagpick" id="tagPick"></div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Repeat</label>
+        <select id="f-freq">
+          <option value="none">Does not repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </div>
+      <div class="field" id="intervalField" style="display:none;">
+        <label>Every</label>
+        <input type="text" id="f-interval" value="1" style="width:100%;">
+      </div>
+    </div>
+    <div class="field" id="untilField" style="display:none;">
+      <label>Ends on (optional)</label>
+      <input type="date" id="f-until">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="f-notes" placeholder="Details..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <div class="left"><button class="btn" id="deleteBtn" style="display:none;color:var(--danger);">Delete</button></div>
+      <div class="right">
+        <button class="btn" id="cancelBtn">Cancel</button>
+        <button class="btn primary" id="saveEventBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- constants ---------- */
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const TAG_PALETTE = ['#c99a3e','#5ea8a0','#a97bc9','#c05a4e','#6a9bd8','#8ec07c'];
+const HOUR_H = 48;
+
+/* ---------- state ---------- */
+let state = {
+  view: 'month',
+  anchor: new Date(),
+  events: [],
+  tags: [],
+  theme: 'dark',
+  editingId: null,
+  editingOccDate: null
+};
+
+/* ---------- date helpers ---------- */
+function pad2(n){ return n<10 ? '0'+n : ''+n; }
+function fmtDate(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function parseDate(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); }
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function addMonths(d,n){ const r=new Date(d); r.setMonth(r.getMonth()+n); return r; }
+function addYears(d,n){ const r=new Date(d); r.setFullYear(r.getFullYear()+n); return r; }
+function startOfWeek(d){ const r=new Date(d); r.setDate(r.getDate()-r.getDay()); r.setHours(0,0,0,0); return r; }
+function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function sameDate(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function isToday(d){ return sameDate(d, new Date()); }
+function timeToMin(t){ if(!t) return 0; const [h,m]=t.split(':').map(Number); return h*60+m; }
+function minToTime(m){ m=((m%1440)+1440)%1440; return pad2(Math.floor(m/60))+':'+pad2(m%60); }
+function genId(){ return 'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+
+/* ---------- storage ---------- */
+async function loadAll(){
+  try{ const r = await window.storage.get('cal:events', false); state.events = r ? JSON.parse(r.value) : []; }
+  catch(e){ state.events = []; }
+  try{ const r = await window.storage.get('cal:tags', false); state.tags = r ? JSON.parse(r.value) : null; }
+  catch(e){ state.tags = null; }
+  if(!state.tags || !state.tags.length){
+    state.tags = [
+      {id:'t1', name:'Work', color:TAG_PALETTE[0]},
+      {id:'t2', name:'Personal', color:TAG_PALETTE[1]},
+      {id:'t3', name:'Important', color:TAG_PALETTE[3]}
+    ];
+    saveTags();
+  }
+  try{ const r = await window.storage.get('cal:settings', false); const s = r ? JSON.parse(r.value) : {}; state.theme = s.theme || 'dark'; }
+  catch(e){ state.theme='dark'; }
+  applyTheme();
+}
+async function saveEvents(){ try{ await window.storage.set('cal:events', JSON.stringify(state.events), false); }catch(e){} }
+async function saveTags(){ try{ await window.storage.set('cal:tags', JSON.stringify(state.tags), false); }catch(e){} }
+async function saveSettings(){ try{ await window.storage.set('cal:settings', JSON.stringify({theme:state.theme}), false); }catch(e){} }
+
+function applyTheme(){ document.documentElement.setAttribute('data-theme', state.theme); }
+function tagById(id){ return state.tags.find(t=>t.id===id); }
+function tagColor(id){ const t=tagById(id); return t ? t.color : '#5a6472'; }
+
+/* ---------- occurrence generation ---------- */
+function getOccurrences(ev, rangeStart, rangeEnd){
+  const base = parseDate(ev.date);
+  const rec = ev.recurrence || {freq:'none'};
+  const exceptions = new Set(ev.exceptions||[]);
+  const results = [];
+  if(rec.freq==='none'){
+    if(base>=rangeStart && base<=rangeEnd && !exceptions.has(fmtDate(base))) results.push(base);
+    return results;
+  }
+  const interval = Math.max(1, parseInt(rec.interval)||1);
+  const until = rec.until ? parseDate(rec.until) : null;
+  let cur = new Date(base);
+  let count = 0;
+  while(cur<=rangeEnd && count<3000){
+    if(until && cur>until) break;
+    if(cur>=rangeStart && !exceptions.has(fmtDate(cur))) results.push(new Date(cur));
+    if(rec.freq==='daily') cur = addDays(cur, interval);
+    else if(rec.freq==='weekly') cur = addDays(cur, 7*interval);
+    else if(rec.freq==='monthly') cur = addMonths(cur, interval);
+    else if(rec.freq==='yearly') cur = addYears(cur, interval);
+    else break;
+    count++;
+  }
+  return results;
+}
+function occurrencesInRange(rangeStart, rangeEnd){
+  const out = [];
+  for(const ev of state.events){
+    const occs = getOccurrences(ev, rangeStart, rangeEnd);
+    for(const d of occs) out.push({ev, date:d});
+  }
+  return out;
+}
+
+/* ---------- move / reschedule ---------- */
+function moveOccurrence(eventId, occDateStr, newDateStr, newStartTime){
+  const ev = state.events.find(e=>e.id===eventId);
+  if(!ev) return;
+  const isRecurring = ev.recurrence && ev.recurrence.freq!=='none';
+  if(!isRecurring){
+    ev.date = newDateStr;
+    if(newStartTime!==undefined && !ev.allDay){
+      const dur = timeToMin(ev.endTime) - timeToMin(ev.startTime);
+      ev.startTime = newStartTime;
+      ev.endTime = minToTime(timeToMin(newStartTime) + Math.max(15,dur));
+    }
+    saveEvents();
+  } else {
+    ev.exceptions = ev.exceptions || [];
+    ev.exceptions.push(occDateStr);
+    const clone = JSON.parse(JSON.stringify(ev));
+    clone.id = genId();
+    clone.date = newDateStr;
+    clone.recurrence = {freq:'none'};
+    clone.exceptions = [];
+    if(newStartTime!==undefined && !ev.allDay){
+      const dur = timeToMin(ev.endTime) - timeToMin(ev.startTime);
+      clone.startTime = newStartTime;
+      clone.endTime = minToTime(timeToMin(newStartTime) + Math.max(15,dur));
+    }
+    state.events.push(clone);
+    saveEvents();
+  }
+  renderAll();
+}
+
+/* ---------- rendering dispatch ---------- */
+const mainEl = document.getElementById('main');
+function renderAll(){
+  document.querySelectorAll('.views button').forEach(b=>b.classList.toggle('active', b.dataset.view===state.view));
+  updatePeriodLabel();
+  if(state.view==='month') renderMonth();
+  else renderWeekOrDay(state.view);
+}
+
+function updatePeriodLabel(){
+  const el = document.getElementById('periodLabel');
+  if(state.view==='month'){
+    el.textContent = MONTHS[state.anchor.getMonth()] + ' ' + state.anchor.getFullYear();
+  } else if(state.view==='week'){
+    const s = startOfWeek(state.anchor), e = addDays(s,6);
+    el.textContent = MONTHS[s.getMonth()].slice(0,3)+' '+s.getDate()+' \u2013 '+MONTHS[e.getMonth()].slice(0,3)+' '+e.getDate()+', '+e.getFullYear();
+  } else {
+    el.textContent = MONTHS[state.anchor.getMonth()]+' '+state.anchor.getDate()+', '+state.anchor.getFullYear();
+  }
+}
+
+/* ---------- month view ---------- */
+function renderMonth(){
+  mainEl.innerHTML = '<div class="month-dow" id="monthDow"></div><div class="month-grid" id="monthGrid"></div>';
+  const dowEl = document.getElementById('monthDow');
+  DOW.forEach(d=>{ const c=document.createElement('div'); c.textContent=d; dowEl.appendChild(c); });
+
+  const grid = document.getElementById('monthGrid');
+  const first = startOfMonth(state.anchor);
+  const gridStart = startOfWeek(first);
+  const cells = [];
+  for(let i=0;i<42;i++) cells.push(addDays(gridStart,i));
+  const rangeStart = cells[0], rangeEnd = addDays(cells[41],1);
+  const occs = occurrencesInRange(rangeStart, rangeEnd);
+  const byDate = {};
+  occs.forEach(o=>{ const k=fmtDate(o.date); (byDate[k]=byDate[k]||[]).push(o); });
+
+  cells.forEach(d=>{
+    const key = fmtDate(d);
+    const cell = document.createElement('div');
+    cell.className = 'mcell';
+    cell.dataset.date = key;
+    if(d.getMonth()!==state.anchor.getMonth()) cell.classList.add('dim');
+    if(isToday(d)) cell.classList.add('today');
+
+    const num = document.createElement('div');
+    num.className = 'dnum';
+    num.textContent = d.getDate();
+    cell.appendChild(num);
+
+    const list = (byDate[key]||[]).sort((a,b)=> (a.ev.allDay?-1:0) - (b.ev.allDay?-1:0) || timeToMin(a.ev.startTime)-timeToMin(b.ev.startTime));
+    const shown = list.slice(0,3);
+    shown.forEach(o=>{
+      const chip = document.createElement('div');
+      chip.className='chip';
+      chip.style.borderLeftColor = tagColor(o.ev.tagId);
+      chip.draggable = true;
+      chip.innerHTML = (o.ev.allDay?'':'<span class="tm">'+o.ev.startTime+'</span>') + escapeHtml(o.ev.title||'Untitled');
+      chip.addEventListener('click',(e)=>{ e.stopPropagation(); openEventModal(o.ev.id, fmtDate(o.date)); });
+      chip.addEventListener('dragstart',(e)=>{
+        e.dataTransfer.setData('text/plain', JSON.stringify({eventId:o.ev.id, occDate:fmtDate(o.date)}));
+      });
+      cell.appendChild(chip);
+    });
+    if(list.length>3){
+      const more = document.createElement('div');
+      more.className='more-link';
+      more.textContent = '+'+(list.length-3)+' more';
+      more.addEventListener('click',(e)=>{ e.stopPropagation(); state.anchor=d; state.view='day'; renderAll(); });
+      cell.appendChild(more);
+    }
+
+    cell.addEventListener('click', ()=> openEventModal(null, key));
+    cell.addEventListener('dragover', (e)=>{ e.preventDefault(); cell.classList.add('dragover'); });
+    cell.addEventListener('dragleave', ()=> cell.classList.remove('dragover'));
+    cell.addEventListener('drop',(e)=>{
+      e.preventDefault(); cell.classList.remove('dragover');
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      moveOccurrence(data.eventId, data.occDate, key, undefined);
+    });
+    grid.appendChild(cell);
+  });
+}
+
+/* ---------- week / day view ---------- */
+function renderWeekOrDay(mode){
+  const days = mode==='week'
+    ? Array.from({length:7}, (_,i)=> addDays(startOfWeek(state.anchor), i))
+    : [new Date(state.anchor)];
+
+  let html = '<div class="tv-header"><div class="tv-gutter-header"></div>';
+  days.forEach(d=>{
+    html += '<div class="tv-day-header'+(isToday(d)?' today':'')+'"><div class="dn">'+DOW[d.getDay()]+'</div><div class="dd">'+d.getDate()+'</div></div>';
+  });
+  html += '</div>';
+
+  html += '<div class="allday-row"><div class="allday-gutter">all-day</div>';
+  days.forEach(d=>{ html += '<div class="allday-cell" data-date="'+fmtDate(d)+'" data-allday="1"></div>'; });
+  html += '</div>';
+
+  html += '<div class="tv-body">';
+  html += '<div class="tv-gutter">' + Array.from({length:24},(_,h)=>'<div class="hr">'+pad2(h)+':00</div>').join('') + '</div>';
+  days.forEach(d=>{
+    html += '<div class="tv-col" data-date="'+fmtDate(d)+'">';
+    for(let h=0;h<24;h++) html += '<div class="hourline"></div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  mainEl.innerHTML = html;
+
+  const rangeStart = days[0], rangeEnd = addDays(days[days.length-1],1);
+  const occs = occurrencesInRange(rangeStart, rangeEnd);
+
+  occs.forEach(o=>{
+    const key = fmtDate(o.date);
+    if(o.ev.allDay){
+      const cell = mainEl.querySelector('.allday-cell[data-date="'+key+'"]');
+      if(!cell) return;
+      const chip = document.createElement('div');
+      chip.className='chip';
+      chip.style.borderLeftColor = tagColor(o.ev.tagId);
+      chip.draggable = true;
+      chip.textContent = o.ev.title || 'Untitled';
+      chip.addEventListener('click',(e)=>{ e.stopPropagation(); openEventModal(o.ev.id, key); });
+      chip.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/plain', JSON.stringify({eventId:o.ev.id, occDate:key, allDay:true})); });
+      cell.appendChild(chip);
+    } else {
+      const col = mainEl.querySelector('.tv-col[data-date="'+key+'"]');
+      if(!col) return;
+      const startMin = timeToMin(o.ev.startTime), endMin = Math.max(startMin+15, timeToMin(o.ev.endTime));
+      const block = document.createElement('div');
+      block.className='tblock';
+      block.style.top = (startMin/60*HOUR_H)+'px';
+      block.style.height = ((endMin-startMin)/60*HOUR_H - 2)+'px';
+      block.style.borderLeftColor = tagColor(o.ev.tagId);
+      block.draggable = true;
+      block.innerHTML = '<span class="tt">'+o.ev.startTime+'\u2013'+o.ev.endTime+'</span>'+escapeHtml(o.ev.title||'Untitled');
+      block.addEventListener('click',(e)=>{ e.stopPropagation(); openEventModal(o.ev.id, key); });
+      block.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/plain', JSON.stringify({eventId:o.ev.id, occDate:key})); });
+      col.appendChild(block);
+    }
+  });
+
+  // now-line on today's column
+  const now = new Date();
+  days.forEach(d=>{
+    if(isToday(d)){
+      const col = mainEl.querySelector('.tv-col[data-date="'+fmtDate(d)+'"]');
+      if(col){
+        const line = document.createElement('div');
+        line.className='now-line';
+        line.style.top = ((now.getHours()*60+now.getMinutes())/60*HOUR_H)+'px';
+        col.appendChild(line);
+      }
+    }
+  });
+
+  // click empty column to create event at that time
+  mainEl.querySelectorAll('.tv-col').forEach(col=>{
+    col.addEventListener('click',(e)=>{
+      if(e.target!==col) return;
+      const rect = col.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const mins = Math.round((y/HOUR_H*60)/15)*15;
+      const start = minToTime(mins);
+      openEventModal(null, col.dataset.date, start);
+    });
+    col.addEventListener('dragover',(e)=>{ e.preventDefault(); col.classList.add('dragover'); });
+    col.addEventListener('dragleave', ()=> col.classList.remove('dragover'));
+    col.addEventListener('drop',(e)=>{
+      e.preventDefault(); col.classList.remove('dragover');
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      const rect = col.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const mins = Math.round((y/HOUR_H*60)/15)*15;
+      moveOccurrence(data.eventId, data.occDate, col.dataset.date, data.allDay?undefined:minToTime(mins));
+    });
+  });
+  mainEl.querySelectorAll('.allday-cell').forEach(cell=>{
+    cell.addEventListener('click',(e)=>{ if(e.target===cell) openEventModal(null, cell.dataset.date, null, true); });
+    cell.addEventListener('dragover',(e)=>e.preventDefault());
+    cell.addEventListener('drop',(e)=>{
+      e.preventDefault();
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      moveOccurrence(data.eventId, data.occDate, cell.dataset.date, undefined);
+    });
+  });
+
+  if(mode==='day' || mode==='week'){
+    mainEl.scrollTop = 0;
+    setTimeout(()=>{ mainEl.scrollTop = Math.max(0, 7*HOUR_H); },0);
+  }
+}
+
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+/* ---------- event modal ---------- */
+const overlay = document.getElementById('overlay');
+function openEventModal(eventId, dateStr, startTime, allDayDefault){
+  state.editingId = eventId;
+  document.getElementById('modalTitle').textContent = eventId ? 'Edit event' : 'New event';
+  document.getElementById('deleteBtn').style.display = eventId ? 'inline-block' : 'none';
+
+  let ev = eventId ? state.events.find(e=>e.id===eventId) : null;
+  document.getElementById('f-title').value = ev ? ev.title||'' : '';
+  document.getElementById('f-date').value = dateStr || fmtDate(new Date());
+  const allDay = ev ? !!ev.allDay : !!allDayDefault;
+  document.getElementById('f-allday').checked = allDay;
+  document.getElementById('f-start').value = ev ? ev.startTime||'09:00' : (startTime || '09:00');
+  document.getElementById('f-end').value = ev ? ev.endTime||'10:00' : minToTime(timeToMin(startTime||'09:00')+60);
+  document.getElementById('timeRow').style.display = allDay ? 'none' : 'flex';
+  document.getElementById('f-notes').value = ev ? ev.notes||'' : '';
+
+  const freq = ev && ev.recurrence ? ev.recurrence.freq : 'none';
+  document.getElementById('f-freq').value = freq;
+  document.getElementById('f-interval').value = ev && ev.recurrence ? ev.recurrence.interval||1 : 1;
+  document.getElementById('f-until').value = ev && ev.recurrence ? ev.recurrence.until||'' : '';
+  document.getElementById('intervalField').style.display = freq==='none' ? 'none' : 'block';
+  document.getElementById('untilField').style.display = freq==='none' ? 'none' : 'block';
+
+  renderTagPicker(ev ? ev.tagId : null);
+  overlay.classList.add('open');
+  document.getElementById('f-title').focus();
+}
+function closeModal(){ overlay.classList.remove('open'); state.editingId=null; }
+
+function renderTagPicker(selectedId){
+  const wrap = document.getElementById('tagPick');
+  wrap.innerHTML = '';
+  wrap.dataset.selected = selectedId || '';
+  const noneSw = document.createElement('div');
+  noneSw.className='sw'+(!selectedId?' selected':'');
+  noneSw.style.background = '#5a6472';
+  noneSw.title = 'None';
+  noneSw.addEventListener('click',()=>{ wrap.dataset.selected=''; renderTagPicker(null); });
+  wrap.appendChild(noneSw);
+  state.tags.forEach(t=>{
+    const sw = document.createElement('div');
+    sw.className='sw'+(selectedId===t.id?' selected':'');
+    sw.style.background = t.color;
+    sw.title = t.name;
+    sw.addEventListener('click',()=>{ wrap.dataset.selected=t.id; renderTagPicker(t.id); });
+    wrap.appendChild(sw);
+  });
+}
+
+document.getElementById('f-allday').addEventListener('change', (e)=>{
+  document.getElementById('timeRow').style.display = e.target.checked ? 'none' : 'flex';
+});
+document.getElementById('f-freq').addEventListener('change', (e)=>{
+  const on = e.target.value!=='none';
+  document.getElementById('intervalField').style.display = on?'block':'none';
+  document.getElementById('untilField').style.display = on?'block':'none';
+});
+document.getElementById('cancelBtn').addEventListener('click', closeModal);
+overlay.addEventListener('click',(e)=>{ if(e.target===overlay) closeModal(); });
+
+document.getElementById('saveEventBtn').addEventListener('click', ()=>{
+  const title = document.getElementById('f-title').value.trim() || 'Untitled event';
+  const date = document.getElementById('f-date').value;
+  const allDay = document.getElementById('f-allday').checked;
+  const startTime = allDay ? null : document.getElementById('f-start').value;
+  const endTime = allDay ? null : document.getElementById('f-end').value;
+  const notes = document.getElementById('f-notes').value;
+  const tagId = document.getElementById('tagPick').dataset.selected || null;
+  const freq = document.getElementById('f-freq').value;
+  const interval = parseInt(document.getElementById('f-interval').value)||1;
+  const until = document.getElementById('f-until').value || null;
+  const recurrence = freq==='none' ? {freq:'none'} : {freq, interval, until};
+
+  if(!date){ alert('Pick a date.'); return; }
+
+  if(state.editingId){
+    const ev = state.events.find(e=>e.id===state.editingId);
+    Object.assign(ev, {title,date,allDay,startTime,endTime,notes,tagId,recurrence});
+  } else {
+    state.events.push({ id:genId(), title,date,allDay,startTime,endTime,notes,tagId,recurrence, exceptions:[] });
+  }
+  saveEvents();
+  closeModal();
+  renderAll();
+});
+document.getElementById('deleteBtn').addEventListener('click', ()=>{
+  state.events = state.events.filter(e=>e.id!==state.editingId);
+  saveEvents();
+  closeModal();
+  renderAll();
+});
+
+/* ---------- tag manager ---------- */
+const tagMgr = document.getElementById('tagMgr');
+document.getElementById('tagsBtn').addEventListener('click', ()=>{
+  tagMgr.classList.toggle('open');
+  document.getElementById('helpPanel').classList.remove('open');
+  renderTagList();
+});
+function renderTagList(){
+  const list = document.getElementById('tagList');
+  list.innerHTML = '';
+  state.tags.forEach(t=>{
+    const row = document.createElement('div');
+    row.className='tagrow';
+    row.innerHTML = '<div class="sw" style="background:'+t.color+'"></div><span>'+escapeHtml(t.name)+'</span>';
+    const x = document.createElement('span');
+    x.className='x'; x.textContent='\u00d7';
+    x.addEventListener('click', ()=>{ state.tags = state.tags.filter(x=>x.id!==t.id); saveTags(); renderTagList(); renderAll(); });
+    row.appendChild(x);
+    list.appendChild(row);
+  });
+}
+document.getElementById('addTagBtn').addEventListener('click', ()=>{
+  const input = document.getElementById('newTagName');
+  const name = input.value.trim();
+  if(!name) return;
+  const color = TAG_PALETTE[state.tags.length % TAG_PALETTE.length];
+  state.tags.push({id:genId(), name, color});
+  saveTags();
+  input.value='';
+  renderTagList();
+});
+
+/* ---------- help panel ---------- */
+const helpPanel = document.getElementById('helpPanel');
+document.getElementById('helpBtn').addEventListener('click', ()=>{
+  helpPanel.classList.toggle('open');
+  tagMgr.classList.remove('open');
+});
+
+/* ---------- search ---------- */
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+searchInput.addEventListener('input', ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if(!q){ searchResults.classList.remove('open'); return; }
+  const far = addYears(new Date(),2);
+  const near = addYears(new Date(),-2);
+  const occs = occurrencesInRange(near, far);
+  const matches = occs.filter(o=>{
+    const t = tagById(o.ev.tagId);
+    return (o.ev.title||'').toLowerCase().includes(q)
+      || (o.ev.notes||'').toLowerCase().includes(q)
+      || (t && t.name.toLowerCase().includes(q));
+  }).sort((a,b)=>a.date-b.date).slice(0,8);
+
+  searchResults.innerHTML = '';
+  if(!matches.length){
+    searchResults.innerHTML = '<div class="empty">No matches</div>';
+  } else {
+    matches.forEach(m=>{
+      const item = document.createElement('div');
+      item.className='item';
+      item.innerHTML = '<div class="t">'+escapeHtml(m.ev.title||'Untitled')+'</div><div class="d">'+fmtDate(m.date)+(m.ev.allDay?'':' '+m.ev.startTime)+'</div>';
+      item.addEventListener('click', ()=>{
+        state.anchor = new Date(m.date);
+        state.view = 'day';
+        searchResults.classList.remove('open');
+        searchInput.value='';
+        renderAll();
+      });
+      searchResults.appendChild(item);
+    });
+  }
+  searchResults.classList.add('open');
+});
+document.addEventListener('click',(e)=>{
+  if(!e.target.closest('.search-wrap')) searchResults.classList.remove('open');
+  if(!e.target.closest('.tagmgr') && e.target.id!=='tagsBtn') tagMgr.classList.remove('open');
+  if(!e.target.closest('.help') && e.target.id!=='helpBtn') helpPanel.classList.remove('open');
+});
+
+/* ---------- toolbar nav ---------- */
+document.querySelectorAll('.views button').forEach(b=>{
+  b.addEventListener('click', ()=>{ state.view=b.dataset.view; renderAll(); });
+});
+document.getElementById('prevBtn').addEventListener('click', ()=> step(-1));
+document.getElementById('nextBtn').addEventListener('click', ()=> step(1));
+document.getElementById('todayBtn').addEventListener('click', ()=>{ state.anchor=new Date(); renderAll(); });
+document.getElementById('newBtn').addEventListener('click', ()=> openEventModal(null, fmtDate(state.anchor)));
+document.getElementById('themeBtn').addEventListener('click', ()=>{
+  state.theme = state.theme==='dark' ? 'light' : 'dark';
+  applyTheme(); saveSettings();
+});
+function step(dir){
+  if(state.view==='month') state.anchor = addMonths(state.anchor, dir);
+  else if(state.view==='week') state.anchor = addDays(state.anchor, dir*7);
+  else state.anchor = addDays(state.anchor, dir);
+  renderAll();
+}
+
+/* ---------- keyboard shortcuts ---------- */
+document.addEventListener('keydown',(e)=>{
+  const tag = (e.target.tagName||'').toLowerCase();
+  const typing = tag==='input' || tag==='textarea' || tag==='select';
+  if(e.key==='Escape'){
+    closeModal(); searchResults.classList.remove('open'); tagMgr.classList.remove('open'); helpPanel.classList.remove('open');
+    searchInput.blur();
+    return;
+  }
+  if(typing) return;
+  if(overlay.classList.contains('open')) return;
+  switch(e.key){
+    case 'm': state.view='month'; renderAll(); break;
+    case 'w': state.view='week'; renderAll(); break;
+    case 'd': state.view='day'; renderAll(); break;
+    case 'h': step(-1); break;
+    case 'l': step(1); break;
+    case 't': state.anchor=new Date(); renderAll(); break;
+    case 'n': openEventModal(null, fmtDate(state.anchor)); break;
+    case '/': e.preventDefault(); searchInput.focus(); break;
+    case 'j': mainEl.scrollTop += 100; break;
+    case 'k': mainEl.scrollTop -= 100; break;
+    case '?': helpPanel.classList.toggle('open'); break;
+  }
+});
+
+/* ---------- init ---------- */
+(async function init(){
+  await loadAll();
+  renderAll();
+})();
+</script>
+</body>
+</html>
